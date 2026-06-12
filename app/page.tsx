@@ -47,7 +47,7 @@ export default function Home() {
     const response = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url })
+      body: JSON.stringify({ url }),
     });
 
     const data = await response.json();
@@ -70,8 +70,8 @@ export default function Home() {
         `PROMPT VIDEO:\n${short.videoPrompt}`,
         `TITRE: ${short.title}`,
         `DESCRIPTION:\n${short.description}`,
-        `HASHTAGS: ${short.hashtags.join(" ")}`
-      ].join("\n\n")
+        `HASHTAGS: ${short.hashtags.join(" ")}`,
+      ].join("\n\n"),
     );
   }
 
@@ -84,8 +84,8 @@ export default function Home() {
         </div>
         <h1>Colle un lien. Sors 4 shorts originaux.</h1>
         <p>
-          Analyse le sujet d'une vidéo YouTube et transforme-le en scripts,
-          prompts visuels, titres, descriptions et hashtags prêts à produire.
+          Analyse le sujet d&apos;une vidéo YouTube et transforme-le en scripts, prompts visuels,
+          titres, descriptions et hashtags prêts à produire.
         </p>
 
         <div className="inputRow">
@@ -108,7 +108,7 @@ export default function Home() {
           ["Analyse", "Lien, titre, description, transcription", Clapperboard],
           ["Scripts", "4 angles viraux en français", Captions],
           ["Voix", "OpenAI TTS dès que la clé est ajoutée", Mic2],
-          ["Publication", "YouTube, TikTok, Instagram via OAuth", BarChart3]
+          ["Publication", "YouTube, TikTok, Instagram via OAuth", BarChart3],
         ].map(([title, text, Icon]) => (
           <div className="step" key={title as string}>
             <Icon size={20} />
@@ -126,7 +126,9 @@ export default function Home() {
               <h2>{analysis.source.title}</h2>
               <p>
                 {analysis.source.author} · {duration} ·{" "}
-                {analysis.source.transcript ? "transcription trouvée" : "sans transcription publique"}
+                {analysis.source.transcript
+                  ? "transcription trouvée"
+                  : "sans transcription publique"}
               </p>
             </div>
           </section>
@@ -160,7 +162,7 @@ export default function Home() {
           </section>
 
           <section className="requirements">
-            <h2>Ce qu'il faut pour activer la suite</h2>
+            <h2>Ce qu&apos;il faut pour activer la suite</h2>
             {Object.entries(analysis.nextSteps).map(([key, value]) => (
               <div key={key}>
                 <strong>{key}</strong>

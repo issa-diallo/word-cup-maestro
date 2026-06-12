@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+
+echo "Running ESLint and Prettier on staged files..."
+npx lint-staged

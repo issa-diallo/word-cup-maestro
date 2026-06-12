@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
+    "format": "prettier --write --ignore-unknown .",
+    "format:check": "prettier --check --ignore-unknown .",
+    "prepare": "husky",
     "typecheck": "tsc --noEmit",
     "verify:pipeline": "tsx scripts/verify-pipeline.ts --mode dry-run --limit 1 --strict",
     "verify:pipeline:4": "tsx scripts/verify-pipeline.ts --mode dry-run --limit 4 --strict"
@@ -25,6 +28,14 @@
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.48.0",
+    "@typescript-eslint/parser": "^8.48.0",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^15.5.19",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
+    "prettier": "^3.8.4",
     "typescript": "^5.5.3"
   },
   "overrides": {
