@@ -56,8 +56,11 @@ function fallbackShorts(source: YoutubeContext): ViralShort[] {
   }));
 }
 
-export async function generateShorts(source: YoutubeContext): Promise<AnalysisResult> {
-  if (!process.env.OPENAI_API_KEY) {
+export async function generateShorts(
+  source: YoutubeContext,
+  options: { mock?: boolean } = {}
+): Promise<AnalysisResult> {
+  if (options.mock || !process.env.OPENAI_API_KEY) {
     return {
       source,
       shorts: fallbackShorts(source),
@@ -93,9 +96,11 @@ export async function generateShorts(source: YoutubeContext): Promise<AnalysisRe
   });
 
   const parsed = JSON.parse(completion.choices[0]?.message.content ?? "{}");
+  const shorts = Array.isArray(parsed.shorts) ? parsed.shorts.slice(0, 4) : fallbackShorts(source);
+
   return {
     source,
-    shorts: parsed.shorts?.slice(0, 4) ?? fallbackShorts(source),
+    shorts: shorts.length === 4 ? shorts : fallbackShorts(source),
     nextSteps: integrationStatus()
   };
 }
@@ -106,10 +111,14 @@ function integrationStatus() {
       ? "Disponible via /api/voice avec OpenAI TTS."
       : "Ajoute OPENAI_API_KEY pour generer la voix.",
     visuals:
-      "Pret cote prompts. Pour generer des videos, il faut une API video: Veo, Runway, Kling, Pika ou Luma.",
+      process.env.KLING_API_KEY_access_token && process.env.KLING_API_KEY_secret_key
+        ? "Disponible via Kling en mode reel, avec mock en dry-run."
+        : "Disponible en mock/dry-run. Ajoute les cles Kling pour le mode reel.",
     mp4:
-      "Assemblage prevu avec Remotion/FFmpeg apres choix du fournisseur visuel.",
+      "Disponible via FFmpeg local avec rendu vertical 1080x1920.",
     publishing:
-      "Publication auto possible apres configuration OAuth YouTube, TikTok et Instagram."
+      process.env.N8N_WEBHOOK_URL
+        ? "Disponible via webhook n8n, avec idempotency key et dry-run."
+        : "Ajoute N8N_WEBHOOK_URL pour publier via n8n."
   };
 }

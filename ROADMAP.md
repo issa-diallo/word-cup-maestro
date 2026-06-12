@@ -44,7 +44,9 @@ Les acces de base sont configures dans `.env` :
   - description
   - hashtags
 
-Statut : deja commence dans l'application locale.
+Statut : implemente et verifie. `/api/analyze` et le pipeline CLI
+recuperent le contexte YouTube, produisent exactement 4 shorts structures, et
+basculent en generation mock en dry-run pour eviter les couts OpenAI.
 
 ## 2. Voix off
 
@@ -53,7 +55,10 @@ Statut : deja commence dans l'application locale.
 - Exporter chaque voix en MP3.
 - Stocker le chemin local ou l'URL de chaque fichier audio.
 
-Statut : cles disponibles, integration a implementer/tester.
+Statut : implemente et verifie en dry-run. Le module genere un MP3 local par
+script, reutilise le fichier si le script a deja ete traite, utilise ElevenLabs
+en priorite en mode reel puis OpenAI TTS en fallback. En dry-run, un MP3 mock
+lisible est cree sans appel externe.
 
 ## 3. Visuels realistes
 
@@ -68,7 +73,10 @@ Statut : cles disponibles, integration a implementer/tester.
   - status
   - URL ou chemin du clip
 
-Statut : cles Kling disponibles, integration a implementer/tester.
+Statut : implemente avec client Kling et fallback mock. Le client signe les
+requetes Kling avec JWT HS256 a partir des cles `.env`, cree une tache
+text-to-video 9:16 et poll le resultat. En dry-run, un clip MP4 mock 9:16 est
+cree localement et les metadonnees provider/job/status sont conservees.
 
 ## 4. Montage automatique
 
@@ -83,7 +91,12 @@ Statut : cles Kling disponibles, integration a implementer/tester.
 - Exporter 4 videos MP4 verticales en format 9:16.
 - Verifier la duree, le ratio, l'audio et le poids du fichier.
 
-Statut : a implementer/tester.
+Statut : implemente et verifie en dry-run avec FFmpeg embarque via
+`ffmpeg-static`. Le rendu final sort en MP4 1080x1920 avec audio et verification
+locale. Limite actuelle : le binaire embarque ne contient pas `drawtext`, donc
+les overlays texte/sous-titres visuels sont representes par un habillage
+graphique mock; un ffmpeg avec `drawtext` ou une etape image texte est requis
+pour les sous-titres dynamiques reels.
 
 ## 5. Stockage
 
@@ -96,7 +109,10 @@ Statut : a implementer/tester.
 <CLOUDFLARE_R2_PUBLIC_URL>/<object-key>.mp4
 ```
 
-Statut : acces R2 et URL publique configures, integration applicative a implementer/tester.
+Statut : implemente. En mode reel, l'upload utilise une requete PUT signee
+AWS SigV4 vers Cloudflare R2 avec les variables `.env`, puis verifie l'URL
+publique par HEAD. En dry-run, le pipeline calcule la cle objet stable et l'URL
+publique sans uploader.
 
 ## 6. Publication automatique
 
@@ -128,7 +144,10 @@ Payload cible :
 }
 ```
 
-Statut : workflow n8n cree et actif, appel applicatif a implementer/tester.
+Statut : implemente. `/api/publish` et le pipeline envoient un POST JSON vers
+`N8N_WEBHOOK_URL` en mode reel avec `video_url`, `title`, `description`,
+`hashtags`, `platforms` et `request_id` comme cle d'idempotence. En dry-run, la
+charge utile est stockee localement sans publication.
 
 ## 7. Analytics
 
@@ -157,15 +176,44 @@ Statut : apres publication automatique.
 
 Statut : apres validation du pipeline complet.
 
+## Etat pipeline actuel
+
+Commande de verification dry-run :
+
+```bash
+npm run verify:pipeline
+npm run verify:pipeline:4
+```
+
+Resultat verifie le 2026-06-12 :
+
+- build Next.js : OK.
+- typecheck TypeScript : OK.
+- audit npm : 0 vulnerabilite connue.
+- dry-run 1 short : OK.
+- dry-run strict 4 shorts : OK.
+- voix mock MP3 : OK.
+- clip mock MP4 : OK.
+- rendu final MP4 1080x1920 avec audio : OK.
+- URL R2 calculee depuis `CLOUDFLARE_R2_PUBLIC_URL` : OK.
+- payload n8n dry-run avec idempotency key : OK.
+- API `/api/pipeline` en dry-run 1 short : OK.
+- API `/api/publish` sans `video_url` : erreur 400 attendue.
+- API `/api/analyze` et `/api/pipeline` avec lien invalide : erreur 400 attendue.
+
+Les sorties sont ecrites dans `output/viral-shorts/<timestamp>/` avec un
+`report.json` final et un `report.partial.json` pendant l'execution. La
+verification stricte controle les fichiers non vides, les dimensions 1080x1920,
+la presence audio, les URLs R2 derivees de `.env` et les payloads n8n.
+
 ## Priorite immediate
 
-1. Finaliser le MVP `lien YouTube -> 4 scripts`.
-2. Ajouter la generation de voix off.
-3. Ajouter la generation de visuels IA avec Kling.
-4. Ajouter le montage MP4 automatique.
-5. Uploader les MP4 vers Cloudflare R2.
-6. Appeler le webhook n8n pour publier via Upload-Post.
-7. Tester une publication de bout en bout sur Instagram + YouTube.
+1. Tester `npm run verify:pipeline` avec un lien YouTube cible.
+2. Lancer un test semi-reel sur 1 short avec voix reelle ou Kling reel si les
+   credits API sont disponibles.
+3. Lancer un upload R2 reel sur un MP4 de test.
+4. Declencher le webhook n8n reel avec une URL R2 valide.
+5. Ajouter une etape texte/sous-titres reels au rendu MP4.
 
 ## Cles et acces necessaires
 
