@@ -115,10 +115,53 @@ export async function cropToVertical(clipPath: string, outputDir: string): Promi
   }
 }
 
+export async function burnSubtitles(
+  clipPath: string,
+  assPath: string,
+  outputDir: string,
+): Promise<ClipFileResult> {
+  const finalDir = await ensureDir(path.join(outputDir, "clips", "final"));
+  const segmentId = path.basename(clipPath, path.extname(clipPath));
+  const outputPath = path.join(finalDir, `${segmentId}.mp4`);
+
+  try {
+    await runFfmpeg([
+      "-y",
+      "-i",
+      clipPath,
+      "-vf",
+      `ass=${escapeFilterPath(assPath)}`,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "22",
+      "-c:a",
+      "copy",
+      outputPath,
+    ]);
+
+    if (!(await fileExists(outputPath))) throw new Error("Clip final absent apres incrustation.");
+    return { segmentId, status: "completed", path: outputPath };
+  } catch (error) {
+    return {
+      segmentId,
+      status: "failed",
+      path: outputPath,
+      error: error instanceof Error ? error.message : "Incrustation des sous-titres impossible.",
+    };
+  }
+}
+
 async function getVideoCodec(sourcePath: string) {
   const result = await runFfmpeg(["-hide_banner", "-i", sourcePath], { allowFailure: true });
   const match = result.stderr.match(/Video:\s*([^,\s]+)/i);
   return match?.[1]?.toLowerCase();
+}
+
+function escapeFilterPath(filePath: string) {
+  return filePath.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
 }
 
 function runFfmpeg(args: string[], options: { allowFailure?: boolean } = {}) {
