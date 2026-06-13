@@ -55,7 +55,7 @@ export async function transcribeVideo(
     model: "whisper-1",
     response_format: "verbose_json",
     timestamp_granularities: ["word"],
-    language: options.language ?? "fr",
+    ...(options.language === undefined ? {} : { language: options.language }),
   })) as WhisperResponse;
 
   const words = normalizeWords(raw.words);
