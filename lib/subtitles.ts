@@ -30,8 +30,11 @@ export async function generateAssSubtitles(
     }))
     .filter((word) => word.text && word.end > word.start)
     .map(
-      (word) =>
-        `Dialogue: 0,${formatAssTime(word.start)},${formatAssTime(word.end)},Default,{\\c&H00FFFF&}${word.text}{\\r}`,
+      (word, index, subtitleWords) =>
+        `Dialogue: 0,${formatAssTime(word.start)},${formatAssTime(word.end)},Default,${formatSubtitleWindow(
+          subtitleWords,
+          index,
+        )}`,
     );
 
   const content = `${ASS_HEADER}\n${events.join("\n")}\n`;
@@ -58,4 +61,17 @@ function escapeAssText(value: string) {
     .replace(/}/g, "\\}")
     .replace(/\r?\n/g, " ")
     .trim();
+}
+
+function formatSubtitleWindow(words: Array<{ text: string }>, activeIndex: number) {
+  const previous = words[activeIndex - 1]?.text;
+  const active = words[activeIndex].text;
+  const next = words[activeIndex + 1]?.text;
+  const parts: string[] = [];
+
+  if (previous) parts.push(`{\\c&H00FFFFFF&}${previous}`);
+  parts.push(`{\\c&H00FFFF&}${active}{\\r}`);
+  if (next) parts.push(`{\\c&H00FFFFFF&}${next}`);
+
+  return parts.join(" ");
 }
