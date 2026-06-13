@@ -101,7 +101,7 @@ export async function runClippingPipeline(
   const mode = getPipelineMode(options.mode);
   const startedAt = new Date().toISOString();
   const outputDir = await ensureDir(path.join(OUTPUT_DIR, startedAt.replace(/[:.]/g, "-")));
-  const source = await downloadYoutubeVideo(options.url, outputDir);
+  const source = await downloadYoutubeVideo(options.url, outputDir, { mock: mode === "dry-run" });
   const transcript = await transcribeVideo(source.path, {
     outputDir,
     mock: mode === "dry-run",

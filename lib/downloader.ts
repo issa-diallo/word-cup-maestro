@@ -36,10 +36,24 @@ type YtDlpJson = {
 export async function downloadYoutubeVideo(
   url: string,
   outputDir: string,
+  options: { mock?: boolean } = {},
 ): Promise<DownloadedVideo> {
   assertYoutubeUrl(url);
 
   const sourceDir = await ensureDir(path.join(outputDir, "clips", "source"));
+
+  if (options.mock) {
+    const filePath = path.join(sourceDir, "mock-source.mp4");
+    await createMockSourceVideo(filePath);
+    return {
+      id: "mock",
+      title: "Mock Source",
+      author: "Mock",
+      path: filePath,
+      durationSeconds: 5,
+    };
+  }
+
   const executable = getYtDlpPath();
   const args = [
     "--format",
@@ -129,6 +143,57 @@ function findDownloadedPath(metadata: YtDlpJson, outputDir: string, id: string) 
 
   const ext = metadata.ext === "mp4" ? metadata.ext : "mp4";
   return path.join(outputDir, `${id}.${ext}`);
+}
+
+async function createMockSourceVideo(filePath: string) {
+  await runFfmpegCommand([
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=0x11110f:s=1080x1920:d=5:r=30",
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=channel_layout=stereo:sample_rate=44100",
+    "-t",
+    "5",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-shortest",
+    filePath,
+  ]);
+}
+
+function runFfmpegCommand(args: string[]) {
+  const executable = getFfmpegPath();
+
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(executable, args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => {
+      reject(new Error(`ffmpeg indisponible: ${error.message}`));
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(stderr.slice(-800) || `ffmpeg a echoue avec le code ${code}.`));
+    });
+  });
 }
 
 function runCommand(command: string, args: string[]) {
