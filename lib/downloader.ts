@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { getFfmpegPath } from "./ffmpeg";
 import { ensureDir } from "./files";
 
 const YOUTUBE_HOSTS = new Set([
@@ -45,6 +46,8 @@ export async function downloadYoutubeVideo(
     "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]",
     "--merge-output-format",
     "mp4",
+    "--ffmpeg-location",
+    getFfmpegPath(),
     "--output",
     path.join(sourceDir, "%(id)s.%(ext)s"),
     "--no-playlist",
