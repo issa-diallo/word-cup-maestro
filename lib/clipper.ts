@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { getFfmpegPath } from "./ffmpeg";
 import { ensureDir, fileExists } from "./files";
-import type { ViralClipSegment } from "./segments";
+import type { ClippingSegment } from "./types";
 
 export type ClipFileResult = {
   segmentId: string;
@@ -13,7 +13,7 @@ export type ClipFileResult = {
 
 export async function cutSegment(
   sourcePath: string,
-  segment: ViralClipSegment,
+  segment: ClippingSegment,
   outputDir: string,
 ): Promise<ClipFileResult> {
   const rawDir = await ensureDir(path.join(outputDir, "clips", "raw"));

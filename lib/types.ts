@@ -1,4 +1,6 @@
 import type { AnalysisResult, ViralShort } from "./shorts";
+import type { DownloadedVideo } from "./downloader";
+import type { VideoTranscript } from "./transcription";
 
 export type VoiceoverResult = {
   shortId: string;
@@ -62,4 +64,37 @@ export type PipelineReport = {
   finishedAt: string;
   outputDir: string;
   shorts: PipelineShortResult[];
+};
+
+export type ClippingSegment = {
+  id: string;
+  start: number;
+  end: number;
+  title: string;
+  description: string;
+  hashtags: string[];
+  hook: string;
+};
+
+export type ClippingShortResult = {
+  segment: ClippingSegment;
+  rawClip?: RenderResult;
+  verticalClip?: RenderResult;
+  subtitlesPath?: string;
+  render?: RenderResult;
+  upload?: UploadResult;
+  publish?: PublishResult;
+};
+
+export type ClippingPipelineReport = {
+  mode: "real" | "dry-run";
+  source: DownloadedVideo & { url: string };
+  transcript: Pick<VideoTranscript, "rawPath" | "transcriptPath"> & {
+    words: number;
+    segments: number;
+  };
+  startedAt: string;
+  finishedAt: string;
+  outputDir: string;
+  clips: ClippingShortResult[];
 };

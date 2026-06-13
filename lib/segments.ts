@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { getEnv } from "./env";
 import { writeJson } from "./files";
 import type { VideoTranscript } from "./transcription";
+import type { ClippingSegment } from "./types";
 
 const MIN_SEGMENT_SECONDS = 30;
 const MAX_SEGMENT_SECONDS = 90;
@@ -13,25 +14,15 @@ export type ClippingVideoMeta = {
   durationSeconds: number;
 };
 
-export type ViralClipSegment = {
-  id: string;
-  start: number;
-  end: number;
-  title: string;
-  description: string;
-  hashtags: string[];
-  hook: string;
-};
-
 type SegmentResponse = {
-  segments?: Array<Partial<ViralClipSegment>>;
+  segments?: Array<Partial<ClippingSegment>>;
 };
 
 export async function identifyViralSegments(
   transcript: VideoTranscript,
   videoMeta: ClippingVideoMeta,
   options: { outputDir?: string; limit?: number; mock?: boolean } = {},
-): Promise<ViralClipSegment[]> {
+): Promise<ClippingSegment[]> {
   const limit = clampLimit(options.limit);
 
   if (options.mock || !getEnv("OPENAI_API_KEY")) {
@@ -59,7 +50,7 @@ export async function identifyViralSegments(
   const normalized = parsed.segments
     ? parsed.segments
         .map((segment, index) => normalizeSegment(segment, videoMeta, index))
-        .filter((segment): segment is ViralClipSegment => Boolean(segment))
+        .filter((segment): segment is ClippingSegment => Boolean(segment))
         .slice(0, limit)
     : [];
 
@@ -80,7 +71,7 @@ function parseSegmentResponse(content: string | null | undefined): SegmentRespon
 }
 
 function normalizeSegment(
-  segment: Partial<ViralClipSegment>,
+  segment: Partial<ClippingSegment>,
   videoMeta: ClippingVideoMeta,
   index: number,
 ) {
@@ -115,12 +106,12 @@ function fallbackSegments(
   transcript: VideoTranscript,
   videoMeta: ClippingVideoMeta,
   limit: number,
-): ViralClipSegment[] {
+): ClippingSegment[] {
   const candidates = transcript.segments.length
     ? transcript.segments
     : [{ text: videoMeta.title, start: 0, end: Math.min(videoMeta.durationSeconds, 60) }];
 
-  const segments: ViralClipSegment[] = [];
+  const segments: ClippingSegment[] = [];
   const usedStarts = new Set<number>();
 
   for (const candidate of candidates) {
@@ -209,7 +200,7 @@ function roundSeconds(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-async function writeSegments(segments: ViralClipSegment[], outputDir: string | undefined) {
+async function writeSegments(segments: ClippingSegment[], outputDir: string | undefined) {
   if (outputDir) await writeJson(path.join(outputDir, "segments.json"), { segments });
   return segments;
 }
