@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ensureDir, fileExists, hashText, OUTPUT_DIR, slugify } from "./files";
 import { getFfmpegPath } from "./ffmpeg";
@@ -46,13 +47,20 @@ async function createMockClip(short: ViralShort, filePath: string) {
     "-c:a",
     "aac",
     "-shortest",
-    filePath
+    filePath,
   ]);
+}
+
+async function downloadClip(url: string, filePath: string) {
+  const response = await fetch(url);
+  if (!response.ok)
+    throw new Error(`Telechargement du clip Kling impossible (${response.status}).`);
+  await writeFile(filePath, Buffer.from(await response.arrayBuffer()));
 }
 
 export async function generateVideoClip(
   short: ViralShort,
-  options: { mode: PipelineMode; outputDir?: string } = { mode: "dry-run" }
+  options: { mode: PipelineMode; outputDir?: string } = { mode: "dry-run" },
 ): Promise<VideoGenerationResult> {
   const outputDir = await ensureDir(path.join(options.outputDir ?? OUTPUT_DIR, "clips"));
   const fileName = `${short.id}-${slugify(short.title)}-${hashText(short.videoPrompt, 8)}.mp4`;
@@ -65,21 +73,25 @@ export async function generateVideoClip(
       prompt: short.videoPrompt,
       jobId: hashText(filePath),
       status: "completed",
-      path: filePath
+      path: filePath,
     };
   }
 
   try {
     if (shouldUseKling(options.mode)) {
       const created = await createKlingTextToVideoTask(short.videoPrompt);
-      const finished = await pollKlingTask(created.jobId);
+      const finished = await pollKlingTask(created.jobId, 48);
+      if (finished.status === "completed" && finished.url) {
+        await downloadClip(finished.url, filePath);
+      }
       return {
         shortId: short.id,
         provider: "kling",
         prompt: short.videoPrompt,
         jobId: finished.jobId,
         status: finished.status,
-        url: finished.url
+        url: finished.url,
+        path: finished.status === "completed" ? filePath : undefined,
       };
     }
 
@@ -90,7 +102,7 @@ export async function generateVideoClip(
       prompt: short.videoPrompt,
       jobId: `mock-${hashText(short.videoPrompt)}`,
       status: "completed",
-      path: filePath
+      path: filePath,
     };
   } catch (error) {
     return {
@@ -99,7 +111,7 @@ export async function generateVideoClip(
       prompt: short.videoPrompt,
       jobId: `failed-${hashText(short.videoPrompt)}`,
       status: "failed",
-      error: error instanceof Error ? error.message : "Generation video impossible."
+      error: error instanceof Error ? error.message : "Generation video impossible.",
     };
   }
 }

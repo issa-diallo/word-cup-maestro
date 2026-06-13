@@ -27,11 +27,14 @@ const fallbackAngles = [
   "Le moment qui change tout",
   "L'histoire que tout le monde va commenter",
   "L'analyse simple qui rend le sujet évident",
-  "Le format stats qui donne envie de partager"
+  "Le format stats qui donne envie de partager",
 ];
 
 function cleanTopic(title: string) {
-  return title.replace(/[-|].*YouTube/i, "").replace(/\s+/g, " ").trim();
+  return title
+    .replace(/[-|].*YouTube/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function fallbackShorts(source: YoutubeContext): ViralShort[] {
@@ -52,19 +55,69 @@ function fallbackShorts(source: YoutubeContext): ViralShort[] {
     videoPrompt: `Vertical 9:16 sports news short about "${topic}". Fast editorial montage, cinematic stadium atmosphere, animated scoreboard, bold French captions, realistic but fully original AI visuals, no TV broadcast footage, no channel logos, high energy, punchy cuts, clean mobile framing.`,
     title: `${topic} : le detail qui peut devenir viral`,
     description: `Analyse originale inspiree du sujet "${topic}". Aucun extrait TV reutilise, video creee avec narration, visuels originaux et montage vertical.`,
-    hashtags: ["#Football", "#WorldCup", "#Shorts", "#Foot", "#AnalyseFoot"]
+    hashtags: ["#Football", "#WorldCup", "#Shorts", "#Foot", "#AnalyseFoot"],
   }));
+}
+
+function normalizeHashtags(value: unknown, fallback: string[]) {
+  if (Array.isArray(value)) {
+    const tags = value
+      .filter((tag): tag is string => typeof tag === "string")
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`));
+    return tags.length ? tags : fallback;
+  }
+
+  if (typeof value === "string") {
+    const tags = value
+      .split(/[\s,]+/)
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`));
+    return tags.length ? tags : fallback;
+  }
+
+  return fallback;
+}
+
+function normalizeShort(
+  short: Partial<ViralShort>,
+  fallback: ViralShort,
+  index: number,
+): ViralShort {
+  return {
+    id: typeof short.id === "string" && short.id.trim() ? short.id.trim() : `short-${index + 1}`,
+    angle:
+      typeof short.angle === "string" && short.angle.trim() ? short.angle.trim() : fallback.angle,
+    hook: typeof short.hook === "string" && short.hook.trim() ? short.hook.trim() : fallback.hook,
+    script:
+      typeof short.script === "string" && short.script.trim()
+        ? short.script.trim()
+        : fallback.script,
+    videoPrompt:
+      typeof short.videoPrompt === "string" && short.videoPrompt.trim()
+        ? short.videoPrompt.trim()
+        : fallback.videoPrompt,
+    title:
+      typeof short.title === "string" && short.title.trim() ? short.title.trim() : fallback.title,
+    description:
+      typeof short.description === "string" && short.description.trim()
+        ? short.description.trim()
+        : fallback.description,
+    hashtags: normalizeHashtags(short.hashtags, fallback.hashtags),
+  };
 }
 
 export async function generateShorts(
   source: YoutubeContext,
-  options: { mock?: boolean } = {}
+  options: { mock?: boolean } = {},
 ): Promise<AnalysisResult> {
   if (options.mock || !process.env.OPENAI_API_KEY) {
     return {
       source,
       shorts: fallbackShorts(source),
-      nextSteps: integrationStatus()
+      nextSteps: integrationStatus(),
     };
   }
 
@@ -74,7 +127,7 @@ export async function generateShorts(
     `Createur: ${source.author}`,
     source.description ? `Description: ${source.description}` : "",
     source.keywords.length ? `Mots-cles: ${source.keywords.join(", ")}` : "",
-    source.transcript ? `Transcription: ${source.transcript.slice(0, 7000)}` : ""
+    source.transcript ? `Transcription: ${source.transcript.slice(0, 7000)}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -86,22 +139,30 @@ export async function generateShorts(
       {
         role: "system",
         content:
-          "Tu es un producteur de shorts viraux francophones. Tu crees des videos originales inspirees d'une source YouTube sans reutiliser d'images TV, logos, audio ou commentaires proteges. Reponds uniquement en JSON valide."
+          "Tu es un producteur de shorts viraux francophones. Tu crees des videos originales inspirees d'une source YouTube sans reutiliser d'images TV, logos, audio ou commentaires proteges. Reponds uniquement en JSON valide.",
       },
       {
         role: "user",
-        content: `A partir de ce contexte YouTube, genere exactement 4 shorts originaux. Chaque short doit contenir: id, angle, hook, script 45-60 secondes en francais, videoPrompt pour generer des visuels IA verticaux 9:16, title, description, hashtags. JSON attendu: {"shorts":[...]}\n\n${context}`
-      }
-    ]
+        content: `A partir de ce contexte YouTube, genere exactement 4 shorts originaux. Chaque short doit contenir: id, angle, hook, script 45-60 secondes en francais, videoPrompt pour generer des visuels IA verticaux 9:16, title, description, hashtags. JSON attendu: {"shorts":[...]}\n\n${context}`,
+      },
+    ],
   });
 
   const parsed = JSON.parse(completion.choices[0]?.message.content ?? "{}");
-  const shorts = Array.isArray(parsed.shorts) ? parsed.shorts.slice(0, 4) : fallbackShorts(source);
+  const fallback = fallbackShorts(source);
+  const parsedShorts: unknown[] = Array.isArray(parsed.shorts) ? parsed.shorts : [];
+  const shorts = parsedShorts.length
+    ? parsedShorts
+        .slice(0, 4)
+        .map((short: unknown, index: number) =>
+          normalizeShort(typeof short === "object" && short ? short : {}, fallback[index], index),
+        )
+    : fallback;
 
   return {
     source,
     shorts: shorts.length === 4 ? shorts : fallbackShorts(source),
-    nextSteps: integrationStatus()
+    nextSteps: integrationStatus(),
   };
 }
 
@@ -114,11 +175,9 @@ function integrationStatus() {
       process.env.KLING_API_KEY_access_token && process.env.KLING_API_KEY_secret_key
         ? "Disponible via Kling en mode reel, avec mock en dry-run."
         : "Disponible en mock/dry-run. Ajoute les cles Kling pour le mode reel.",
-    mp4:
-      "Disponible via FFmpeg local avec rendu vertical 1080x1920.",
-    publishing:
-      process.env.N8N_WEBHOOK_URL
-        ? "Disponible via webhook n8n, avec idempotency key et dry-run."
-        : "Ajoute N8N_WEBHOOK_URL pour publier via n8n."
+    mp4: "Disponible via FFmpeg local avec rendu vertical 1080x1920.",
+    publishing: process.env.N8N_WEBHOOK_URL
+      ? "Disponible via webhook n8n, avec idempotency key et dry-run."
+      : "Ajoute N8N_WEBHOOK_URL pour publier via n8n.",
   };
 }

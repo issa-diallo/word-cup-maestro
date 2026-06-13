@@ -39,7 +39,7 @@ async function createMockVoiceover(script: string, filePath: string) {
     String(duration),
     "-q:a",
     "6",
-    filePath
+    filePath,
   ]);
 }
 
@@ -52,16 +52,16 @@ async function generateElevenLabs(script: string, filePath: string) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "xi-api-key": apiKey
+      "xi-api-key": apiKey,
     },
     body: JSON.stringify({
       text: script.slice(0, 4000),
       model_id: getEnv("ELEVENLABS_MODEL_ID") ?? "eleven_multilingual_v2",
       voice_settings: {
         stability: 0.48,
-        similarity_boost: 0.75
-      }
-    })
+        similarity_boost: 0.75,
+      },
+    }),
   });
 
   if (!response.ok) {
@@ -80,7 +80,7 @@ async function generateOpenAiVoice(script: string, filePath: string) {
     model: getEnv("OPENAI_TTS_MODEL") ?? "tts-1",
     voice: (getEnv("OPENAI_TTS_VOICE") ?? "onyx") as "alloy",
     input: script.slice(0, 4000),
-    response_format: "mp3"
+    response_format: "mp3",
   });
 
   await writeFile(filePath, Buffer.from(await speech.arrayBuffer()));
@@ -88,7 +88,7 @@ async function generateOpenAiVoice(script: string, filePath: string) {
 
 export async function generateVoiceover(
   short: ViralShort,
-  options: { mode: PipelineMode; outputDir?: string } = { mode: "dry-run" }
+  options: { mode: PipelineMode; outputDir?: string } = { mode: "dry-run" },
 ): Promise<VoiceoverResult> {
   const outputDir = await ensureDir(path.join(options.outputDir ?? OUTPUT_DIR, "audio"));
   const fileName = `${short.id}-${slugify(short.title)}-${hashText(short.script, 8)}.mp3`;
@@ -99,14 +99,18 @@ export async function generateVoiceover(
       shortId: short.id,
       provider: options.mode === "real" && getEnv("ELEVENLABS_API_KEY") ? "elevenlabs" : "mock",
       status: "completed",
-      path: filePath
+      path: filePath,
     };
   }
 
   try {
     if (options.mode === "real" && getEnv("ELEVENLABS_API_KEY")) {
-      await generateElevenLabs(short.script, filePath);
-      return { shortId: short.id, provider: "elevenlabs", status: "completed", path: filePath };
+      try {
+        await generateElevenLabs(short.script, filePath);
+        return { shortId: short.id, provider: "elevenlabs", status: "completed", path: filePath };
+      } catch (elevenLabsError) {
+        if (!getEnv("OPENAI_API_KEY")) throw elevenLabsError;
+      }
     }
 
     if (options.mode === "real" && getEnv("OPENAI_API_KEY")) {
@@ -121,7 +125,7 @@ export async function generateVoiceover(
       shortId: short.id,
       provider: "mock",
       status: "failed",
-      error: error instanceof Error ? error.message : "Generation voix impossible."
+      error: error instanceof Error ? error.message : "Generation voix impossible.",
     };
   }
 }
