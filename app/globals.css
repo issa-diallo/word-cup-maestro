@@ -19,8 +19,7 @@ body {
   min-height: 100%;
   background:
     linear-gradient(120deg, rgba(255, 61, 0, 0.08), transparent 38%),
-    radial-gradient(circle at 78% 8%, rgba(14, 143, 104, 0.16), transparent 32%),
-    var(--paper);
+    radial-gradient(circle at 78% 8%, rgba(14, 143, 104, 0.16), transparent 32%), var(--paper);
   color: var(--ink);
   font-family: Georgia, "Times New Roman", serif;
 }
@@ -54,6 +53,7 @@ button:disabled {
 }
 
 .eyebrow,
+.modeSwitch,
 .inputRow,
 .step,
 .cardTop,
@@ -88,6 +88,33 @@ h1 {
   color: var(--muted);
   font-size: 21px;
   line-height: 1.42;
+}
+
+.modeSwitch {
+  width: fit-content;
+  gap: 4px;
+  margin-bottom: 18px;
+  padding: 4px;
+  border: 2px solid var(--ink);
+  background: var(--panel);
+}
+
+.modeSwitch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 154px;
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.modeSwitch button.active {
+  background: var(--dark);
+  color: white;
 }
 
 .inputRow {
@@ -285,6 +312,15 @@ h1 {
   .inputRow {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .modeSwitch {
+    width: 100%;
+  }
+
+  .modeSwitch button {
+    min-width: 0;
+    flex: 1;
   }
 
   .inputRow button {

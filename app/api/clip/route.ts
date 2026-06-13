@@ -1,23 +1,20 @@
 import { NextResponse } from "next/server";
-import { runClippingPipeline, runPipeline } from "@/lib/pipeline";
+import { runClippingPipeline } from "@/lib/pipeline";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { url, mode, type, publish } = body;
-    const options = {
-      url,
-      mode,
+    const report = await runClippingPipeline({
+      url: body.url,
+      mode: body.mode,
       limit: normalizeLimit(body.limit),
-      publish: publish !== false,
+      publish: body.publish !== false,
       platforms: normalizePlatforms(body.platforms),
-    };
-    const report =
-      type === "clipping" ? await runClippingPipeline(options) : await runPipeline(options);
+    });
 
     return NextResponse.json(report);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Pipeline impossible.";
+    const message = error instanceof Error ? error.message : "Clipping impossible.";
     const status =
       message.includes("Lien YouTube invalide") || message.includes("Lien YouTube requis")
         ? 400

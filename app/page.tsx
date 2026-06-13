@@ -25,29 +25,55 @@ type Analysis = {
   nextSteps: Record<string, string>;
 };
 
+type RunMode = "generation" | "clipping";
+
+type ClipReport = {
+  source: {
+    title?: string;
+    author?: string;
+    durationSeconds: number;
+  };
+  outputDir: string;
+  clips: Array<{
+    segment: {
+      id: string;
+      title: string;
+      start: number;
+      end: number;
+      hashtags: string[];
+    };
+    render?: { status: string; path?: string };
+    upload?: { status: string; publicUrl?: string };
+    publish?: { status: string };
+  }>;
+};
+
 export default function Home() {
   const [url, setUrl] = useState("");
+  const [mode, setMode] = useState<RunMode>("generation");
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [clipReport, setClipReport] = useState<ClipReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const duration = useMemo(() => {
-    const seconds = analysis?.source.durationSeconds;
+    const seconds = analysis?.source.durationSeconds ?? clipReport?.source.durationSeconds;
     if (!seconds) return "duree inconnue";
     const minutes = Math.floor(seconds / 60);
     const rest = seconds % 60;
     return `${minutes}:${String(rest).padStart(2, "0")}`;
-  }, [analysis]);
+  }, [analysis?.source.durationSeconds, clipReport?.source.durationSeconds]);
 
   async function analyze() {
     setLoading(true);
     setError("");
     setAnalysis(null);
+    setClipReport(null);
 
-    const response = await fetch("/api/analyze", {
+    const response = await fetch(mode === "clipping" ? "/api/clip" : "/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, limit: 1, publish: false }),
     });
 
     const data = await response.json();
@@ -58,7 +84,11 @@ export default function Home() {
       return;
     }
 
-    setAnalysis(data);
+    if (mode === "clipping") {
+      setClipReport(data);
+    } else {
+      setAnalysis(data);
+    }
   }
 
   function copyShort(short: ViralShort) {
@@ -88,6 +118,25 @@ export default function Home() {
           titres, descriptions et hashtags prêts à produire.
         </p>
 
+        <div className="modeSwitch" aria-label="Mode de pipeline">
+          <button
+            className={mode === "generation" ? "active" : ""}
+            onClick={() => setMode("generation")}
+            type="button"
+          >
+            <Wand2 size={16} />
+            Génération IA
+          </button>
+          <button
+            className={mode === "clipping" ? "active" : ""}
+            onClick={() => setMode("clipping")}
+            type="button"
+          >
+            <Clapperboard size={16} />
+            Clipping réel
+          </button>
+        </div>
+
         <div className="inputRow">
           <Link2 size={20} />
           <input
@@ -97,7 +146,7 @@ export default function Home() {
           />
           <button onClick={analyze} disabled={loading || !url}>
             <Wand2 size={18} />
-            {loading ? "Analyse..." : "Générer"}
+            {loading ? "Traitement..." : mode === "clipping" ? "Clipper" : "Générer"}
           </button>
         </div>
         {error ? <div className="error">{error}</div> : null}
@@ -168,6 +217,42 @@ export default function Home() {
                 <strong>{key}</strong>
                 <span>{value}</span>
               </div>
+            ))}
+          </section>
+        </>
+      ) : null}
+
+      {clipReport ? (
+        <>
+          <section className="source">
+            <div>
+              <span>source clippée</span>
+              <h2>{clipReport.source.title ?? "Vidéo YouTube"}</h2>
+              <p>
+                {clipReport.source.author ?? "YouTube"} · {duration} · {clipReport.clips.length}{" "}
+                clip
+                {clipReport.clips.length > 1 ? "s" : ""}
+              </p>
+            </div>
+          </section>
+
+          <section className="grid">
+            {clipReport.clips.map((clip, index) => (
+              <article className="shortCard" key={clip.segment.id}>
+                <div className="cardTop">
+                  <span>clip {index + 1}</span>
+                  <strong>{Math.round(clip.segment.end - clip.segment.start)}s</strong>
+                </div>
+                <h3>{clip.segment.title}</h3>
+                <p className="hook">
+                  {clip.segment.start.toFixed(1)}s → {clip.segment.end.toFixed(1)}s
+                </p>
+                <div className="meta">
+                  <strong>{clip.render?.status ?? "en attente"}</strong>
+                  <p>{clip.render?.path ?? clip.upload?.publicUrl ?? clipReport.outputDir}</p>
+                  <span>{clip.segment.hashtags.join(" ")}</span>
+                </div>
+              </article>
             ))}
           </section>
         </>
