@@ -78,6 +78,43 @@ export async function cutSegment(
   }
 }
 
+export async function cropToVertical(clipPath: string, outputDir: string): Promise<ClipFileResult> {
+  const verticalDir = await ensureDir(path.join(outputDir, "clips", "vertical"));
+  const segmentId = path.basename(clipPath, path.extname(clipPath));
+  const outputPath = path.join(verticalDir, `${segmentId}.mp4`);
+
+  try {
+    await runFfmpeg([
+      "-y",
+      "-i",
+      clipPath,
+      "-vf",
+      "crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "23",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "128k",
+      outputPath,
+    ]);
+
+    if (!(await fileExists(outputPath))) throw new Error("Clip vertical absent apres recadrage.");
+    return { segmentId, status: "completed", path: outputPath };
+  } catch (error) {
+    return {
+      segmentId,
+      status: "failed",
+      path: outputPath,
+      error: error instanceof Error ? error.message : "Recadrage vertical impossible.",
+    };
+  }
+}
+
 async function getVideoCodec(sourcePath: string) {
   const result = await runFfmpeg(["-hide_banner", "-i", sourcePath], { allowFailure: true });
   const match = result.stderr.match(/Video:\s*([^,\s]+)/i);
