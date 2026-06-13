@@ -10,6 +10,7 @@
     "format": "prettier --write --ignore-unknown .",
     "format:check": "prettier --check --ignore-unknown .",
     "prepare": "husky",
+    "tools:yt-dlp": "bin/yt-dlp --version",
     "typecheck": "tsc --noEmit",
     "verify:pipeline": "tsx scripts/verify-pipeline.ts --mode dry-run --limit 1 --strict",
     "verify:pipeline:4": "tsx scripts/verify-pipeline.ts --mode dry-run --limit 4 --strict"
