@@ -10,6 +10,7 @@ build/
 dist/
 output/
 tsconfig.tsbuildinfo
+deploy/evidence/
 
 # environment files
 .env

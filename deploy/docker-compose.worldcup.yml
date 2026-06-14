@@ -15,6 +15,7 @@ services:
       - root_default
     labels:
       - traefik.enable=true
+      - traefik.docker.network=root_default
       - traefik.http.routers.worldcup.rule=Host(`worldcup.${DOMAIN_NAME}`)
       - traefik.http.routers.worldcup.entrypoints=web,websecure
       - traefik.http.routers.worldcup.tls=true
