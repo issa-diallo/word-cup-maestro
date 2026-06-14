@@ -141,7 +141,7 @@ npx tsx scripts/verify-pipeline.ts \
 - `POST /api/clip` avec `{ "url": "...", "mode": "dry-run", "limit": 1 }`
 - `POST /api/pipeline` avec `{ "url": "...", "type": "clipping", "mode": "dry-run", "limit": 1 }`
 
-Exemple :
+Exemple sans publication :
 
 ```bash
 curl -X POST http://localhost:3000/api/clip \
@@ -150,10 +150,15 @@ curl -X POST http://localhost:3000/api/clip \
     "url": "https://youtu.be/...",
     "mode": "real",
     "limit": 2,
-    "publish": true,
+    "publish": false,
     "platforms": ["instagram", "youtube"]
   }'
 ```
+
+Les routes publiques/locales `/api/clip` et `/api/pipeline` ne publient pas en
+`mode: "real"`. La publication reelle en production passe par
+`/api/telegram/publish`, avec authentification et confirmation humaine
+explicite.
 
 ### Generation (legacy)
 
@@ -161,6 +166,10 @@ curl -X POST http://localhost:3000/api/clip \
 - `POST /api/voice` avec `{ "script": "...", "mode": "dry-run" }`
 - `POST /api/publish` avec `{ "video_url": "...", "title": "...", "mode": "dry-run" }`
 - `POST /api/pipeline` avec `{ "url": "...", "type": "generation", "mode": "dry-run", "limit": 1 }`
+
+`/api/publish` est limite au dry-run. Une requete `mode: "real"` retourne
+`403`; utiliser `/api/telegram/publish` apres validation humaine pour publier
+reellement.
 
 ## Variables d'environnement
 
@@ -255,9 +264,11 @@ output/viral-shorts/<timestamp>/
 
 ## Points d'attention
 
-- Les routes API locales acceptent `mode: "real"`. Ne pas exposer l'app
-  publiquement sans authentification, limitation de debit et controle d'acces.
-- `mode: "real"` peut publier reellement sur YouTube et Instagram.
+- Les routes API locales acceptent `mode: "real"` pour analyser, clipper,
+  rendre et uploader, mais ne publient pas reellement.
+- La publication reelle sur YouTube et Instagram passe par
+  `/api/telegram/publish`, protegee par `TELEGRAM_AGENT_SECRET` et
+  `confirmed: true`.
 - Whisper auto-detecte la langue. Pour forcer une langue, passer `language`
   dans les options de `transcribeVideo`.
 - Avant l'appel Whisper, la video est convertie en MP3 mono 16 kHz / 24 kbps
@@ -281,8 +292,9 @@ output/viral-shorts/<timestamp>/
 ## Workflow Telegram / n8n
 
 Le workflow conversationnel passe par n8n et Telegram. L'app Next expose deux
-routes dediees derriere `APP_URL_LOCAL`, qui peut etre une URL Cloudflare
-Tunnel vers `localhost:3000`.
+routes dediees. En local, n8n peut utiliser `APP_URL_LOCAL`, par exemple une
+URL Cloudflare Tunnel vers `localhost:3000`. En production, n8n doit utiliser
+`APP_URL_PROD`, l'URL HTTPS stable du VPS Hostinger.
 
 Processus attendu :
 
@@ -303,15 +315,17 @@ Routes :
 "platforms": ["youtube", "instagram"] }`
   - Body asynchrone recommande pour Telegram : `{ "url": "...", "limit": 3,
 "platforms": ["youtube", "instagram"], "async": true }`
-  - Reponse asynchrone immediate : `{ "status": "processing", "jobId": "..." }`
+  - Reponse asynchrone immediate : `{ "status": "queued", "jobId": "..." }`
   - Contraintes : URL YouTube requise, `limit` entre 1 et 6, plateformes
     autorisees `youtube`, `instagram`, `tiktok`.
-  - Effet : genere et upload les previews, sans publication.
+  - Effet : met le job dans une file en memoire, puis genere et upload les
+    previews sans publication. Un seul job Telegram tourne a la fois par
+    processus Node.
 
 - `GET /api/telegram/clip/status?jobId=...`
   - Authentification : `Authorization: Bearer <TELEGRAM_AGENT_SECRET>`
   - Reponse pendant le traitement : `{ "status": "queued" | "processing",
-"jobId": "...", "clips": [] }`
+"jobId": "...", "queuePosition": 1, "clips": [] }`
   - Reponse finale : `{ "status": "ready", "clips": [...] }` ou une erreur.
   - Usage n8n : envoyer d'abord un message Telegram "Je prepare les clips",
     puis verifier ce statut jusqu'a `ready` ou `failed`.
@@ -320,9 +334,12 @@ Routes :
   - Authentification : `Authorization: Bearer <TELEGRAM_AGENT_SECRET>`
   - Body : `{ "clips": [{ "id": "clip-1", "title": "...",
 "description": "...", "hashtags": ["#football"],
-"videoUrl": "https://..." }], "platforms": ["youtube", "instagram"] }`
+  "videoUrl": "https://..." }], "platforms": ["youtube", "instagram"],
+  "confirmed": true }`
   - Contraintes : 1 a 6 clips, `videoUrl` HTTPS publique, plateformes
-    autorisees `youtube`, `instagram`, `tiktok`.
+    autorisees `youtube`, `instagram`, `tiktok`, `videoUrl` sous
+    `CLOUDFLARE_R2_PUBLIC_URL`, confirmation humaine explicite via
+    `confirmed: true`.
   - Effet : appelle `publishViaN8n`, donc peut publier reellement.
 
 Variables requises cote app :
@@ -330,6 +347,8 @@ Variables requises cote app :
 ```env
 TELEGRAM_AGENT_SECRET=
 APP_URL_LOCAL=
+APP_URL_PROD=https://api.example.com
+NODE_ENV=production
 OPENAI_API_KEY=
 CLOUDFLARE_R2_ACCOUNT_ID=
 CLOUDFLARE_R2_ACCESS_KEY_ID=
@@ -337,13 +356,60 @@ CLOUDFLARE_R2_SECRET_ACCESS_KEY=
 CLOUDFLARE_R2_BUCKET=
 CLOUDFLARE_R2_PUBLIC_URL=
 N8N_WEBHOOK_URL=
+CLIPPING_MAX_SOURCE_SECONDS=900
+TELEGRAM_CLIP_MAX_QUEUED_JOBS=10
 ```
+
+Deploiement VPS :
+
+- Exemple d'environnement sans secrets : `.env.example`
+- Exemple PM2 : `deploy/ecosystem.config.cjs`
+  - PM2 est volontairement configure en instance unique tant que la file
+    Telegram reste en memoire.
+- Exemple Nginx : `deploy/nginx/worldcup.conf`
+- Runbook n8n prod : `deploy/n8n-production-tools.md`
+- Verification VPS : `npm run verify:vps`
+- Healthcheck : `GET /api/health`
+- Les scripts de deploiement refusent les domaines invalides, les placeholders
+  comme `api.example.com`, et un `APP_URL_PROD` qui n'est pas HTTPS.
+- `npm run verify:vps` controle les valeurs non secretes importantes sans
+  afficher les secrets : URLs publiques HTTPS, `NODE_ENV=production`, duree
+  max et taille de file positives.
+- `deploy/deploy-app.sh` peut aussi lancer le test live de clipping/R2 si
+  `YOUTUBE_TEST_URL` est fourni.
+- `npm run collect:cutover-evidence` genere un rapport local ignore par Git
+  sous `deploy/evidence/` apres les verifications VPS/prod.
 
 Test rapide du tunnel :
 
 ```bash
 curl "$APP_URL_LOCAL"
 ```
+
+Test rapide de production :
+
+```bash
+npm run verify:telegram:prod -- "$APP_URL_PROD"
+```
+
+Cette commande verifie que l'URL est bien HTTPS, teste `/api/health` sans
+cache, le refus des appels Telegram sans token, le refus d'un mauvais token sur
+les routes Telegram, et le blocage de `/api/publish` en `mode: "real"`. Si
+`TELEGRAM_AGENT_SECRET` est present dans l'environnement local, elle teste
+aussi une requete autorisee sans lancer de clipping et une publication
+confirmee avec URL externe non-R2, qui doit etre refusee avant n8n.
+
+Test live de generation de preview sur le VPS :
+
+```bash
+npm run verify:telegram:clip-live -- \
+  --url "$APP_URL_PROD" \
+  --youtube "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+Cette commande lance volontairement un vrai clipping asynchrone, poll le statut
+jusqu'a `ready` ou `failed`, puis verifie qu'au moins une preview publique
+HTTPS sous `CLOUDFLARE_R2_PUBLIC_URL` est retournee. Elle ne publie rien.
 
 Test de generation de previews sans publication :
 
@@ -367,7 +433,14 @@ Notes de securite :
 - Ne jamais exposer `TELEGRAM_AGENT_SECRET`, les webhooks n8n, les cles R2,
   les cles Supabase service role ou les identifiants Upload-Post.
 - `APP_URL_LOCAL` change si le tunnel Cloudflare est relance.
+- `APP_URL_PROD` doit etre utilise par n8n en production a la place de
+  `APP_URL_LOCAL`.
 - Une generation de previews consomme OpenAI/Whisper et upload R2, mais ne
   publie pas.
+- `CLIPPING_MAX_SOURCE_SECONDS` limite la duree source acceptee par le clipping
+  reel. La valeur par defaut est 900 secondes.
+- `TELEGRAM_CLIP_MAX_QUEUED_JOBS` limite les jobs Telegram en attente. La
+  valeur par defaut est 10.
 - La route `/api/telegram/publish` peut publier reellement. Ne l'appeler que
-  depuis n8n apres confirmation explicite dans Telegram.
+  depuis n8n apres confirmation explicite dans Telegram, avec
+  `confirmed: true`.

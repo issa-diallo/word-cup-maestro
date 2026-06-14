@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { getNumberEnv } from "./env";
 import { runClippingPipeline, type RunPipelineOptions } from "./pipeline";
 import type { ClippingPipelineReport } from "./types";
-import type { TelegramPlatform } from "./telegram-agent";
+import { TelegramApiError, toTelegramSafeError, type TelegramPlatform } from "./telegram-agent";
 
 export type TelegramClipPreview = {
   id: string;
@@ -38,13 +39,23 @@ export type TelegramClipJob = {
 
 const MAX_JOBS = 100;
 const JOB_TTL_MS = 2 * 60 * 60 * 1000;
+const MAX_ACTIVE_JOBS = 1;
+const DEFAULT_MAX_QUEUED_JOBS = 10;
 
 const globalForTelegramJobs = globalThis as typeof globalThis & {
   __telegramClipJobs?: Map<string, TelegramClipJob>;
+  __telegramClipJobQueue?: string[];
+  __telegramActiveClipJobs?: Set<string>;
 };
 
 const jobs = globalForTelegramJobs.__telegramClipJobs ?? new Map<string, TelegramClipJob>();
 globalForTelegramJobs.__telegramClipJobs = jobs;
+
+const jobQueue = globalForTelegramJobs.__telegramClipJobQueue ?? [];
+globalForTelegramJobs.__telegramClipJobQueue = jobQueue;
+
+const activeJobs = globalForTelegramJobs.__telegramActiveClipJobs ?? new Set<string>();
+globalForTelegramJobs.__telegramActiveClipJobs = activeJobs;
 
 export function formatTelegramClipReport(
   report: ClippingPipelineReport,
@@ -76,8 +87,13 @@ export function createTelegramClipJob(options: {
   url: string;
   limit: number;
   platforms: TelegramPlatform[];
+  start?: boolean;
 }) {
   cleanupJobs();
+
+  if (getQueuedJobCount() >= getTelegramMaxQueuedJobs()) {
+    throw new TelegramApiError(429, "File de clipping pleine. Reessaie dans quelques minutes.");
+  }
 
   const now = new Date().toISOString();
   const job: TelegramClipJob = {
@@ -91,13 +107,8 @@ export function createTelegramClipJob(options: {
   };
 
   jobs.set(job.id, job);
-  void runTelegramClipJob(job.id, {
-    url: options.url,
-    mode: "real",
-    limit: options.limit,
-    publish: false,
-    platforms: options.platforms,
-  });
+  jobQueue.push(job.id);
+  if (options.start !== false) drainJobQueue();
 
   return job;
 }
@@ -105,6 +116,16 @@ export function createTelegramClipJob(options: {
 export function getTelegramClipJob(jobId: string) {
   cleanupJobs();
   return jobs.get(jobId);
+}
+
+export function getTelegramClipJobQueuePosition(jobId: string) {
+  cleanupJobs();
+  const index = jobQueue.findIndex((queuedJobId) => queuedJobId === jobId);
+  return index >= 0 ? index + 1 : undefined;
+}
+
+export function getTelegramMaxQueuedJobs() {
+  return Math.floor(getNumberEnv("TELEGRAM_CLIP_MAX_QUEUED_JOBS", DEFAULT_MAX_QUEUED_JOBS));
 }
 
 async function runTelegramClipJob(jobId: string, options: RunPipelineOptions) {
@@ -121,9 +142,36 @@ async function runTelegramClipJob(jobId: string, options: RunPipelineOptions) {
   } catch (error) {
     updateJob(jobId, {
       status: "failed",
-      error: error instanceof Error ? error.message : "Generation des previews impossible.",
+      error: toTelegramSafeError(error, "Generation des previews impossible."),
     });
   }
+}
+
+function drainJobQueue() {
+  while (activeJobs.size < MAX_ACTIVE_JOBS) {
+    const nextJobId = jobQueue.shift();
+    if (!nextJobId) return;
+
+    const job = jobs.get(nextJobId);
+    if (!job || job.status !== "queued") continue;
+
+    activeJobs.add(nextJobId);
+    void runTelegramClipJob(nextJobId, {
+      url: job.url,
+      mode: "real",
+      limit: job.limit,
+      publish: false,
+      platforms: job.platforms,
+    }).finally(() => {
+      activeJobs.delete(nextJobId);
+      cleanupJobs();
+      drainJobQueue();
+    });
+  }
+}
+
+function getQueuedJobCount() {
+  return jobQueue.filter((jobId) => jobs.get(jobId)?.status === "queued").length;
 }
 
 function updateJob(jobId: string, patch: Partial<TelegramClipJob>) {
@@ -140,12 +188,19 @@ function updateJob(jobId: string, patch: Partial<TelegramClipJob>) {
 function cleanupJobs() {
   const now = Date.now();
   for (const [jobId, job] of jobs) {
-    if (now - Date.parse(job.createdAt) > JOB_TTL_MS) jobs.delete(jobId);
+    if (!activeJobs.has(jobId) && now - Date.parse(job.createdAt) > JOB_TTL_MS) {
+      jobs.delete(jobId);
+    }
   }
 
   while (jobs.size > MAX_JOBS) {
     const firstJobId = jobs.keys().next().value;
     if (!firstJobId) break;
+    if (activeJobs.has(firstJobId)) break;
     jobs.delete(firstJobId);
+  }
+
+  for (let index = jobQueue.length - 1; index >= 0; index -= 1) {
+    if (!jobs.has(jobQueue[index])) jobQueue.splice(index, 1);
   }
 }

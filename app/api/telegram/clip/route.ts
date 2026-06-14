@@ -8,6 +8,7 @@ import {
   normalizeTelegramPlatforms,
   readTelegramJson,
   TelegramApiError,
+  toTelegramSafeError,
 } from "@/lib/telegram-agent";
 
 export async function POST(request: Request) {
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
       const job = createTelegramClipJob({ url, limit, platforms });
       return NextResponse.json(
         {
-          status: "processing",
+          status: job.status,
           jobId: job.id,
           message:
             "Generation des previews lancee. Utilise /api/telegram/clip/status avec ce jobId.",
@@ -53,11 +54,7 @@ function handleTelegramError(error: unknown, fallback: string) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
 
-  const message =
-    error instanceof Error &&
-    (error.message.includes("Lien YouTube") || error.message.includes("URL YouTube"))
-      ? error.message
-      : fallback;
+  const message = toTelegramSafeError(error, fallback);
   const status = message === fallback ? 500 : 400;
 
   return NextResponse.json({ error: message }, { status });

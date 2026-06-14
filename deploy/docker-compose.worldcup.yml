@@ -1,0 +1,33 @@
+services:
+  worldcup:
+    build:
+      context: /opt/worldcup
+    container_name: worldcup-api
+    restart: unless-stopped
+    env_file:
+      - /opt/worldcup/.env
+    environment:
+      NODE_ENV: production
+      APP_URL_PROD: https://worldcup.${DOMAIN_NAME}
+    volumes:
+      - /opt/worldcup/output:/app/output
+    networks:
+      - root_default
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.worldcup.rule=Host(`worldcup.${DOMAIN_NAME}`)
+      - traefik.http.routers.worldcup.entrypoints=web,websecure
+      - traefik.http.routers.worldcup.tls=true
+      - traefik.http.routers.worldcup.tls.certresolver=mytlschallenge
+      - traefik.http.services.worldcup.loadbalancer.server.port=3000
+      - traefik.http.middlewares.worldcup-headers.headers.browserXSSFilter=true
+      - traefik.http.middlewares.worldcup-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.worldcup-headers.headers.forceSTSHeader=true
+      - traefik.http.middlewares.worldcup-headers.headers.STSSeconds=315360000
+      - traefik.http.middlewares.worldcup-headers.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.worldcup-headers.headers.STSPreload=true
+      - traefik.http.routers.worldcup.middlewares=worldcup-headers@docker
+
+networks:
+  root_default:
+    external: true

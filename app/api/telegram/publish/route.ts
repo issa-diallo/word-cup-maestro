@@ -3,12 +3,13 @@ import { publishViaN8n } from "@/lib/publisher";
 import type { UploadResult } from "@/lib/types";
 import type { ViralShort } from "@/lib/shorts";
 import {
-  assertPublicHttpsUrl,
+  assertR2PublicVideoUrl,
   assertTelegramAgentAuthorized,
   normalizeHashtags,
   normalizeTelegramPlatforms,
   readTelegramJson,
   TelegramApiError,
+  toTelegramSafeError,
 } from "@/lib/telegram-agent";
 
 type TelegramPublishClip = {
@@ -24,6 +25,8 @@ export async function POST(request: Request) {
     assertTelegramAgentAuthorized(request);
 
     const body = await readTelegramJson(request);
+    assertPublishConfirmed(body.confirmed);
+
     const platforms = normalizeTelegramPlatforms(body.platforms);
     const clips = normalizeClips(body.clips);
 
@@ -45,7 +48,9 @@ export async function POST(request: Request) {
           id: clip.id,
           status: result.status,
           requestId: result.requestId,
-          error: result.error,
+          error: result.error
+            ? toTelegramSafeError(new Error(result.error), "Publication impossible.")
+            : undefined,
         };
       }),
     );
@@ -61,6 +66,12 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     return handleTelegramError(error, "Publication impossible.");
+  }
+}
+
+function assertPublishConfirmed(value: unknown) {
+  if (value !== true) {
+    throw new TelegramApiError(400, "Confirmation humaine requise pour publier.");
   }
 }
 
@@ -81,7 +92,7 @@ function normalizeClips(value: unknown): TelegramPublishClip[] {
     const record = clip as Record<string, unknown>;
     const id = normalizeRequiredString(record.id, `clips[${index}].id`);
     const title = normalizeRequiredString(record.title, `clips[${index}].title`);
-    const videoUrl = assertPublicHttpsUrl(record.videoUrl, `clips[${index}].videoUrl`);
+    const videoUrl = assertR2PublicVideoUrl(record.videoUrl, `clips[${index}].videoUrl`);
 
     return {
       id,

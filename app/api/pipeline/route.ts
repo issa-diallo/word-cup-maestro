@@ -9,7 +9,7 @@ export async function POST(request: Request) {
       url,
       mode,
       limit: normalizeLimit(body.limit),
-      publish: publish !== false,
+      publish: mode === "real" ? false : publish === true,
       platforms: normalizePlatforms(body.platforms),
     };
     const report =

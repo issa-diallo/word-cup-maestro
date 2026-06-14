@@ -17,6 +17,11 @@ export function hasEnv(name: string) {
   return Boolean(getEnv(name));
 }
 
+export function getNumberEnv(name: string, fallback: number) {
+  const value = Number(getEnv(name));
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 export function getPipelineMode(mode?: string): PipelineMode {
   return mode === "real" ? "real" : "dry-run";
 }
@@ -28,8 +33,8 @@ export function redactSecrets(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value).map(([key, entry]) => [
       key,
-      SECRET_KEY_PATTERN.test(key) ? "[redacted]" : redactSecrets(entry)
-    ])
+      SECRET_KEY_PATTERN.test(key) ? "[redacted]" : redactSecrets(entry),
+    ]),
   );
 }
 

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { ensureDir, OUTPUT_DIR, writeJson } from "./files";
-import { getPipelineMode } from "./env";
+import { getNumberEnv, getPipelineMode } from "./env";
 import { downloadYoutubeVideo } from "./downloader";
 import { transcribeVideo } from "./transcription";
 import { identifyViralSegments } from "./segments";
@@ -29,7 +29,10 @@ export type RunPipelineOptions = {
   limit?: number;
   publish?: boolean;
   platforms?: string[];
+  maxSourceDurationSeconds?: number;
 };
+
+const DEFAULT_CLIPPING_MAX_SOURCE_SECONDS = 15 * 60;
 
 export async function runPipeline(options: RunPipelineOptions): Promise<PipelineReport> {
   if (!options.url || typeof options.url !== "string") throw new Error("Lien YouTube requis.");
@@ -101,7 +104,10 @@ export async function runClippingPipeline(
   const mode = getPipelineMode(options.mode);
   const startedAt = new Date().toISOString();
   const outputDir = await ensureDir(path.join(OUTPUT_DIR, startedAt.replace(/[:.]/g, "-")));
-  const source = await downloadYoutubeVideo(options.url, outputDir, { mock: mode === "dry-run" });
+  const source = await downloadYoutubeVideo(options.url, outputDir, {
+    mock: mode === "dry-run",
+    maxDurationSeconds: options.maxSourceDurationSeconds ?? getClippingMaxSourceSeconds(),
+  });
   const transcript = await transcribeVideo(source.path, {
     outputDir,
     mock: mode === "dry-run",
@@ -182,6 +188,10 @@ export async function runClippingPipeline(
   });
   await writeJson(path.join(outputDir, "report.json"), report);
   return report;
+}
+
+export function getClippingMaxSourceSeconds() {
+  return getNumberEnv("CLIPPING_MAX_SOURCE_SECONDS", DEFAULT_CLIPPING_MAX_SOURCE_SECONDS);
 }
 
 function buildClippingReport(params: {

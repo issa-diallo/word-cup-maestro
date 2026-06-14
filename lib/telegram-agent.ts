@@ -16,7 +16,7 @@ const YOUTUBE_HOSTS = new Set([
 
 export function assertTelegramAgentAuthorized(request: Request) {
   const configuredSecret = getEnv("TELEGRAM_AGENT_SECRET");
-  if (!configuredSecret) throw new TelegramApiError(500, "TELEGRAM_AGENT_SECRET absent.");
+  if (!configuredSecret) throw new TelegramApiError(500, "Configuration Telegram indisponible.");
 
   const authorization = request.headers.get("authorization") ?? "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
@@ -103,6 +103,40 @@ export function assertPublicHttpsUrl(value: unknown, fieldName: string) {
   }
 
   return parsed.toString();
+}
+
+export function assertR2PublicVideoUrl(value: unknown, fieldName: string) {
+  const publicUrl = assertPublicHttpsUrl(value, fieldName);
+  const publicBase = getEnv("CLOUDFLARE_R2_PUBLIC_URL")?.replace(/\/+$/, "");
+
+  if (!publicBase) {
+    throw new TelegramApiError(500, "Configuration video publique indisponible.");
+  }
+
+  if (!publicUrl.startsWith(`${publicBase}/`)) {
+    throw new TelegramApiError(400, `${fieldName} doit venir des previews R2 generees.`);
+  }
+
+  return publicUrl;
+}
+
+export function toTelegramSafeError(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+
+  const message = error.message.trim();
+  if (
+    message.includes("URL YouTube") ||
+    message.includes("Lien YouTube") ||
+    message.includes("Duree source trop longue") ||
+    message.includes("Aucune preview uploadable") ||
+    message.includes("File de clipping pleine") ||
+    message.includes("Confirmation humaine") ||
+    message.includes("doit venir des previews R2")
+  ) {
+    return message;
+  }
+
+  return fallback;
 }
 
 export class TelegramApiError extends Error {

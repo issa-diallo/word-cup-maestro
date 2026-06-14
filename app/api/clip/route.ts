@@ -8,7 +8,7 @@ export async function POST(request: Request) {
       url: body.url,
       mode: body.mode,
       limit: normalizeLimit(body.limit),
-      publish: body.publish !== false,
+      publish: false,
       platforms: normalizePlatforms(body.platforms),
     });
 

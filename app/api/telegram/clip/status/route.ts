@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTelegramClipJob } from "@/lib/telegram-clip-jobs";
+import { getTelegramClipJob, getTelegramClipJobQueuePosition } from "@/lib/telegram-clip-jobs";
 import { assertTelegramAgentAuthorized, TelegramApiError } from "@/lib/telegram-agent";
 
 export async function GET(request: Request) {
@@ -12,11 +12,14 @@ export async function GET(request: Request) {
 
     const job = getTelegramClipJob(jobId);
     if (!job) throw new TelegramApiError(404, "Job introuvable ou expire.");
+    const queuePosition =
+      job.status === "queued" ? getTelegramClipJobQueuePosition(job.id) : undefined;
 
     return NextResponse.json(
       {
         status: job.status,
         jobId: job.id,
+        queuePosition,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
         source: job.result?.source,

@@ -36,7 +36,7 @@ type YtDlpJson = {
 export async function downloadYoutubeVideo(
   url: string,
   outputDir: string,
-  options: { mock?: boolean } = {},
+  options: { mock?: boolean; maxDurationSeconds?: number } = {},
 ): Promise<DownloadedVideo> {
   assertYoutubeUrl(url);
 
@@ -66,6 +66,7 @@ export async function downloadYoutubeVideo(
     path.join(sourceDir, "%(id)s.%(ext)s"),
     "--no-playlist",
     "--print-json",
+    ...buildDurationFilterArgs(options.maxDurationSeconds),
     url,
   ];
 
@@ -80,6 +81,12 @@ export async function downloadYoutubeVideo(
     throw new Error("yt-dlp n'a pas retourne de duree video valide.");
   }
 
+  if (options.maxDurationSeconds && durationSeconds > options.maxDurationSeconds) {
+    throw new Error(
+      `Duree source trop longue (${Math.round(durationSeconds)}s). Limite: ${options.maxDurationSeconds}s.`,
+    );
+  }
+
   if (!existsSync(filePath)) {
     throw new Error(`Video source introuvable apres telechargement: ${filePath}`);
   }
@@ -91,6 +98,11 @@ export async function downloadYoutubeVideo(
     path: filePath,
     durationSeconds,
   };
+}
+
+function buildDurationFilterArgs(maxDurationSeconds: number | undefined) {
+  if (!maxDurationSeconds || !Number.isFinite(maxDurationSeconds)) return [];
+  return ["--match-filter", `duration <= ${Math.floor(maxDurationSeconds)}`];
 }
 
 export function getYtDlpPath() {
