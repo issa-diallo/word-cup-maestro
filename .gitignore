@@ -17,6 +17,7 @@ tsconfig.tsbuildinfo
 
 # local secrets and notes
 API_KEYS.md
+AUTOMATION_PLAN.md
 archive/
 bin/cloudflared
 
