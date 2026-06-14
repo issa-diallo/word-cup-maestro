@@ -1,7 +1,10 @@
 import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import OpenAI from "openai";
 import { getEnv } from "./env";
+import { getFfmpegPath } from "./ffmpeg";
 import { ensureDir, writeJson } from "./files";
 
 export type TranscriptWord = {
@@ -50,8 +53,9 @@ export async function transcribeVideo(
   if (!apiKey) throw new Error("OPENAI_API_KEY est requis pour transcrire la video.");
 
   const openai = new OpenAI({ apiKey });
+  const audioPath = await prepareAudioForWhisper(videoPath, outputDir);
   const raw = (await openai.audio.transcriptions.create({
-    file: createReadStream(videoPath),
+    file: createReadStream(audioPath),
     model: "whisper-1",
     response_format: "verbose_json",
     timestamp_granularities: ["word"],
@@ -65,6 +69,38 @@ export async function transcribeVideo(
   };
 
   return writeTranscriptFiles(transcript, outputDir, raw);
+}
+
+async function prepareAudioForWhisper(videoPath: string, outputDir: string) {
+  const audioDir = await ensureDir(path.join(outputDir, "clips", "audio"));
+  const audioPath = path.join(
+    audioDir,
+    `${path.basename(videoPath, path.extname(videoPath))}-whisper.mp3`,
+  );
+
+  await runFfmpegCommand([
+    "-y",
+    "-i",
+    videoPath,
+    "-vn",
+    "-ac",
+    "1",
+    "-ar",
+    "16000",
+    "-b:a",
+    "24k",
+    audioPath,
+  ]);
+
+  const info = await stat(audioPath);
+  const maxWhisperBytes = 24 * 1024 * 1024;
+  if (info.size > maxWhisperBytes) {
+    throw new Error(
+      `Audio Whisper trop volumineux (${info.size} octets). Reduis la duree source ou ajoute une transcription par morceaux.`,
+    );
+  }
+
+  return audioPath;
 }
 
 export function groupWordsIntoSegments(words: TranscriptWord[]) {
@@ -158,6 +194,31 @@ function segmentToWords(segment: TranscriptSegment): TranscriptWord[] {
     start: segment.start + step * index,
     end: index === parts.length - 1 ? segment.end : segment.start + step * (index + 1),
   }));
+}
+
+function runFfmpegCommand(args: string[]) {
+  const executable = getFfmpegPath();
+
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(executable, args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => {
+      reject(new Error(`ffmpeg indisponible: ${error.message}`));
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(stderr.slice(-800) || `ffmpeg a echoue avec le code ${code}.`));
+    });
+  });
 }
 
 async function writeTranscriptFiles(

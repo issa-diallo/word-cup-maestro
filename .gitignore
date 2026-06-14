@@ -17,6 +17,8 @@ tsconfig.tsbuildinfo
 
 # local secrets and notes
 API_KEYS.md
+archive/
+bin/cloudflared
 
 # logs
 npm-debug.log*

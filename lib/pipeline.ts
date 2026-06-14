@@ -4,7 +4,7 @@ import { getPipelineMode } from "./env";
 import { downloadYoutubeVideo } from "./downloader";
 import { transcribeVideo } from "./transcription";
 import { identifyViralSegments } from "./segments";
-import { cutSegment, cropToVertical, burnSubtitles, type ClipFileResult } from "./clipper";
+import { cutSegment, cropToVerticalWithSubtitles, type ClipFileResult } from "./clipper";
 import { generateAssSubtitles } from "./subtitles";
 import { getYoutubeContext } from "./youtube";
 import { generateShorts } from "./shorts";
@@ -123,23 +123,23 @@ export async function runClippingPipeline(
     item.rawClip = toRenderResult(rawClip, segment);
 
     if (rawClip.status === "completed" && rawClip.path) {
-      const verticalClip = await cropToVertical(rawClip.path, outputDir);
-      item.verticalClip = toRenderResult(verticalClip, segment, { width: 1080, height: 1920 });
+      const subtitleWords = transcript.words.filter(
+        (word) => word.end >= segment.start && word.start <= segment.end,
+      );
+      const assPath = path.join(outputDir, "clips", "subtitles", `${segment.id}.ass`);
+      item.subtitlesPath = await generateAssSubtitles(subtitleWords, segment.start, assPath);
 
-      if (verticalClip.status === "completed" && verticalClip.path) {
-        const subtitleWords = transcript.words.filter(
-          (word) => word.end >= segment.start && word.start <= segment.end,
-        );
-        const assPath = path.join(outputDir, "clips", "subtitles", `${segment.id}.ass`);
-        item.subtitlesPath = await generateAssSubtitles(subtitleWords, segment.start, assPath);
-
-        const finalClip = await burnSubtitles(verticalClip.path, item.subtitlesPath, outputDir);
-        item.render = toRenderResult(finalClip, segment, {
-          width: 1080,
-          height: 1920,
-          hasAudio: true,
-        });
-      }
+      const finalClip = await cropToVerticalWithSubtitles(
+        rawClip.path,
+        item.subtitlesPath,
+        outputDir,
+      );
+      item.verticalClip = toRenderResult(finalClip, segment, { width: 1080, height: 1920 });
+      item.render = toRenderResult(finalClip, segment, {
+        width: 1080,
+        height: 1920,
+        hasAudio: true,
+      });
     }
 
     if (item.render?.status === "completed") {

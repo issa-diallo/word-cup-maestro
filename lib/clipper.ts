@@ -154,6 +154,52 @@ export async function burnSubtitles(
   }
 }
 
+export async function cropToVerticalWithSubtitles(
+  clipPath: string,
+  assPath: string,
+  outputDir: string,
+): Promise<ClipFileResult> {
+  const finalDir = await ensureDir(path.join(outputDir, "clips", "final"));
+  const segmentId = path.basename(clipPath, path.extname(clipPath));
+  const outputPath = path.join(finalDir, `${segmentId}.mp4`);
+
+  try {
+    await runFfmpeg([
+      "-y",
+      "-i",
+      clipPath,
+      "-vf",
+      `crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920,ass=${escapeFilterPath(assPath)}`,
+      "-map",
+      "0:v:0",
+      "-map",
+      "0:a?",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "22",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "128k",
+      "-shortest",
+      outputPath,
+    ]);
+
+    if (!(await fileExists(outputPath))) throw new Error("Clip final absent apres rendu.");
+    return { segmentId, status: "completed", path: outputPath };
+  } catch (error) {
+    return {
+      segmentId,
+      status: "failed",
+      path: outputPath,
+      error: error instanceof Error ? error.message : "Rendu vertical sous-titre impossible.",
+    };
+  }
+}
+
 async function getVideoCodec(sourcePath: string) {
   const result = await runFfmpeg(["-hide_banner", "-i", sourcePath], { allowFailure: true });
   const match = result.stderr.match(/Video:\s*([^,\s]+)/i);
