@@ -10,10 +10,11 @@ build/
 dist/
 output/
 tsconfig.tsbuildinfo
-deploy/evidence/
 
 # environment files
 .env
+.env*
+!.env.example
 .env*.local
 
 # local secrets and notes
@@ -21,6 +22,8 @@ API_KEYS.md
 AUTOMATION_PLAN.md
 archive/
 bin/cloudflared
+deploy/evidence/
+.playwright-cli/
 
 # logs
 npm-debug.log*
