@@ -27,6 +27,7 @@
     "verify:telegram:queue": "tsx scripts/verify-telegram-queue.ts",
     "verify:telegram:prod": "tsx scripts/verify-telegram-prod.ts",
     "verify:telegram:clip-live": "tsx scripts/verify-telegram-live-clip.ts",
+    "verify:analytics": "tsx scripts/verify-analytics.ts",
     "verify:prod:local": "bash deploy/verify-local-prod.sh",
     "verify:vps": "bash deploy/verify-vps-prereqs.sh",
     "deploy:vps": "bash deploy/deploy-app.sh",

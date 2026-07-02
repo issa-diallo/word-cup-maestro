@@ -161,7 +161,11 @@ charge utile est stockee localement sans publication.
 - Identifier les meilleurs angles.
 - Generer plus de videos a partir des formats gagnants.
 
-Statut : apres publication automatique.
+Statut : socle dry-run/mock implemente. `npm run verify:analytics` genere un
+rapport analytics local sous `output/analytics/` avec vues, likes, commentaires,
+partages, retention, taux d'engagement et score par short/plateforme. La collecte
+reelle Upload-Post/YouTube/Instagram reste a brancher quand les API et acces prod
+sont disponibles.
 
 ## 8. Monetisation
 

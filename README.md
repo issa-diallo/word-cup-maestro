@@ -71,6 +71,9 @@ npm run verify:clipping:real
 # generation (legacy)
 npm run verify:pipeline
 npm run verify:pipeline:4
+
+# analytics dry-run
+npm run verify:analytics
 ```
 
 `npm run verify:clipping` lance un dry-run complet sans yt-dlp ni API payante.
