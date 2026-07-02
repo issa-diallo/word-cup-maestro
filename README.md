@@ -7,6 +7,11 @@ n8n et Upload-Post.
 Deux modes disponibles : **clipping** (decoupe la vraie video source) et
 **generation** (cree une video IA originale avec Kling).
 
+**Positionnement actuel :** le parcours recommande est le **clipping reel**. Le mode
+**generation** reste disponible pour experimentation/legacy, mais les validations
+production et le workflow Telegram/n8n doivent prioriser la generation de previews
+clipping sans publication automatique.
+
 ## Mode clipping (principal)
 
 Workflow valide en dry-run le 2026-06-13 :
@@ -21,7 +26,7 @@ Workflow valide en dry-run le 2026-06-13 :
 8. envoi du payload a n8n ;
 9. publication par Upload-Post sur YouTube et Instagram.
 
-## Mode generation (legacy)
+## Mode generation (legacy / secondaire)
 
 Workflow prod valide le 2026-06-12 :
 
