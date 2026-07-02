@@ -6,6 +6,8 @@ Construire un systeme qui transforme un lien YouTube en videos courtes originale
 
 Le lien YouTube sert a comprendre le sujet, les moments forts et les angles viraux. Les videos finales doivent etre originales : scripts, voix, visuels, montage, titres, descriptions et hashtags.
 
+Note produit actuelle : le repo a evolue vers un parcours prioritaire de **clipping reel** de la video source. La generation IA originale reste documentee comme mode legacy/secondaire.
+
 TikTok reste une extension future, car Upload-Post indique que la connexion TikTok n'est pas disponible sur le forfait gratuit.
 
 ## Etat actuel des acces

@@ -50,7 +50,7 @@ type ClipReport = {
 
 export default function Home() {
   const [url, setUrl] = useState("");
-  const [mode, setMode] = useState<RunMode>("generation");
+  const [mode, setMode] = useState<RunMode>("clipping");
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [clipReport, setClipReport] = useState<ClipReport | null>(null);
   const [loading, setLoading] = useState(false);
@@ -110,12 +110,12 @@ export default function Home() {
       <section className="hero">
         <div className="eyebrow">
           <Rocket size={16} />
-          factory shorts monétisables
+          factory clipping shorts
         </div>
-        <h1>Colle un lien. Sors 4 shorts originaux.</h1>
+        <h1>Colle un lien YouTube. Sors des clips verticaux prêts à valider.</h1>
         <p>
-          Analyse le sujet d&apos;une vidéo YouTube et transforme-le en scripts, prompts visuels,
-          titres, descriptions et hashtags prêts à produire.
+          Découpe les meilleurs moments d&apos;une vidéo YouTube en shorts 1080x1920 avec
+          sous-titres, previews R2 et publication contrôlée après validation humaine.
         </p>
 
         <div className="modeSwitch" aria-label="Mode de pipeline">
@@ -125,7 +125,7 @@ export default function Home() {
             type="button"
           >
             <Wand2 size={16} />
-            Génération IA
+            Génération IA legacy
           </button>
           <button
             className={mode === "clipping" ? "active" : ""}
@@ -154,10 +154,10 @@ export default function Home() {
 
       <section className="pipeline">
         {[
-          ["Analyse", "Lien, titre, description, transcription", Clapperboard],
-          ["Scripts", "4 angles viraux en français", Captions],
-          ["Voix", "OpenAI TTS dès que la clé est ajoutée", Mic2],
-          ["Publication", "YouTube, TikTok, Instagram via OAuth", BarChart3],
+          ["Clipping", "Téléchargement, transcription et sélection des moments", Clapperboard],
+          ["Format mobile", "Recadrage 1080x1920 et sous-titres dynamiques", Captions],
+          ["Previews", "Upload R2 sans publication automatique", Mic2],
+          ["Validation", "Publication YouTube/Instagram seulement après confirmation", BarChart3],
         ].map(([title, text, Icon]) => (
           <div className="step" key={title as string}>
             <Icon size={20} />
