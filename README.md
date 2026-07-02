@@ -363,6 +363,7 @@ CLOUDFLARE_R2_PUBLIC_URL=
 N8N_WEBHOOK_URL=
 CLIPPING_MAX_SOURCE_SECONDS=900
 TELEGRAM_CLIP_MAX_QUEUED_JOBS=10
+TELEGRAM_CLIP_JOBS_STATE_PATH=output/telegram-clip-jobs.json
 ```
 
 Deploiement VPS :
@@ -446,6 +447,12 @@ Notes de securite :
   reel. La valeur par defaut est 900 secondes.
 - `TELEGRAM_CLIP_MAX_QUEUED_JOBS` limite les jobs Telegram en attente. La
   valeur par defaut est 10.
+- `TELEGRAM_CLIP_JOBS_STATE_PATH` permet de surcharger le fichier d'etat des
+  jobs Telegram. Par defaut, l'app persiste les jobs recents dans
+  `output/telegram-clip-jobs.json` afin de conserver les statuts `ready`/`failed`
+  apres un redemarrage. Un job `processing` au moment d'un redemarrage est marque
+  `failed` et doit etre relance, car le traitement FFmpeg/OpenAI ne peut pas etre
+  repris en cours.
 - La route `/api/telegram/publish` peut publier reellement. Ne l'appeler que
   depuis n8n apres confirmation explicite dans Telegram, avec
   `confirmed: true`.
