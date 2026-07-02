@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { getNumberEnv } from "./env";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { getEnv, getNumberEnv } from "./env";
+import { OUTPUT_DIR } from "./files";
 import { runClippingPipeline, type RunPipelineOptions } from "./pipeline";
 import type { ClippingPipelineReport } from "./types";
 import { TelegramApiError, toTelegramSafeError, type TelegramPlatform } from "./telegram-agent";
@@ -37,15 +40,23 @@ export type TelegramClipJob = {
   error?: string;
 };
 
+type PersistedTelegramClipJobs = {
+  version: 1;
+  jobs: TelegramClipJob[];
+  queue: string[];
+};
+
 const MAX_JOBS = 100;
 const JOB_TTL_MS = 2 * 60 * 60 * 1000;
 const MAX_ACTIVE_JOBS = 1;
 const DEFAULT_MAX_QUEUED_JOBS = 10;
+const DEFAULT_STATE_FILE = path.join(OUTPUT_DIR, "telegram-clip-jobs.json");
 
 const globalForTelegramJobs = globalThis as typeof globalThis & {
   __telegramClipJobs?: Map<string, TelegramClipJob>;
   __telegramClipJobQueue?: string[];
   __telegramActiveClipJobs?: Set<string>;
+  __telegramClipJobsLoaded?: boolean;
 };
 
 const jobs = globalForTelegramJobs.__telegramClipJobs ?? new Map<string, TelegramClipJob>();
@@ -56,6 +67,8 @@ globalForTelegramJobs.__telegramClipJobQueue = jobQueue;
 
 const activeJobs = globalForTelegramJobs.__telegramActiveClipJobs ?? new Set<string>();
 globalForTelegramJobs.__telegramActiveClipJobs = activeJobs;
+
+loadPersistedJobsOnce();
 
 export function formatTelegramClipReport(
   report: ClippingPipelineReport,
@@ -108,6 +121,7 @@ export function createTelegramClipJob(options: {
 
   jobs.set(job.id, job);
   jobQueue.push(job.id);
+  persistJobs();
   if (options.start !== false) drainJobQueue();
 
   return job;
@@ -126,6 +140,10 @@ export function getTelegramClipJobQueuePosition(jobId: string) {
 
 export function getTelegramMaxQueuedJobs() {
   return Math.floor(getNumberEnv("TELEGRAM_CLIP_MAX_QUEUED_JOBS", DEFAULT_MAX_QUEUED_JOBS));
+}
+
+export function getTelegramClipJobsStatePath() {
+  return getEnv("TELEGRAM_CLIP_JOBS_STATE_PATH") || DEFAULT_STATE_FILE;
 }
 
 async function runTelegramClipJob(jobId: string, options: RunPipelineOptions) {
@@ -150,11 +168,15 @@ async function runTelegramClipJob(jobId: string, options: RunPipelineOptions) {
 function drainJobQueue() {
   while (activeJobs.size < MAX_ACTIVE_JOBS) {
     const nextJobId = jobQueue.shift();
-    if (!nextJobId) return;
+    if (!nextJobId) {
+      persistJobs();
+      return;
+    }
 
     const job = jobs.get(nextJobId);
     if (!job || job.status !== "queued") continue;
 
+    persistJobs();
     activeJobs.add(nextJobId);
     void runTelegramClipJob(nextJobId, {
       url: job.url,
@@ -183,13 +205,16 @@ function updateJob(jobId: string, patch: Partial<TelegramClipJob>) {
     ...patch,
     updatedAt: new Date().toISOString(),
   });
+  persistJobs();
 }
 
 function cleanupJobs() {
   const now = Date.now();
+  let changed = false;
   for (const [jobId, job] of jobs) {
     if (!activeJobs.has(jobId) && now - Date.parse(job.createdAt) > JOB_TTL_MS) {
       jobs.delete(jobId);
+      changed = true;
     }
   }
 
@@ -198,9 +223,85 @@ function cleanupJobs() {
     if (!firstJobId) break;
     if (activeJobs.has(firstJobId)) break;
     jobs.delete(firstJobId);
+    changed = true;
   }
 
   for (let index = jobQueue.length - 1; index >= 0; index -= 1) {
-    if (!jobs.has(jobQueue[index])) jobQueue.splice(index, 1);
+    if (!jobs.has(jobQueue[index])) {
+      jobQueue.splice(index, 1);
+      changed = true;
+    }
+  }
+
+  if (changed) persistJobs();
+}
+
+function loadPersistedJobsOnce() {
+  if (globalForTelegramJobs.__telegramClipJobsLoaded) return;
+  globalForTelegramJobs.__telegramClipJobsLoaded = true;
+
+  const statePath = getTelegramClipJobsStatePath();
+  if (!existsSync(statePath)) return;
+
+  try {
+    const parsed = JSON.parse(readFileSync(statePath, "utf8")) as PersistedTelegramClipJobs;
+    if (parsed.version !== 1 || !Array.isArray(parsed.jobs) || !Array.isArray(parsed.queue)) return;
+
+    jobs.clear();
+    jobQueue.splice(0, jobQueue.length);
+
+    for (const job of parsed.jobs) {
+      if (!isPersistableJob(job)) continue;
+      jobs.set(job.id, normalizeRestoredJob(job));
+    }
+
+    for (const jobId of parsed.queue) {
+      if (jobs.get(jobId)?.status === "queued") jobQueue.push(jobId);
+    }
+
+    cleanupJobs();
+  } catch {
+    // Ignore corrupt state. The app can continue with an empty in-memory queue.
+  }
+}
+
+function normalizeRestoredJob(job: TelegramClipJob): TelegramClipJob {
+  if (job.status !== "processing") return job;
+
+  return {
+    ...job,
+    status: "failed",
+    updatedAt: new Date().toISOString(),
+    error: "Job interrompu par un redemarrage du serveur. Relance la generation de preview.",
+  };
+}
+
+function isPersistableJob(job: TelegramClipJob): job is TelegramClipJob {
+  return (
+    typeof job?.id === "string" &&
+    ["queued", "processing", "ready", "failed"].includes(job.status) &&
+    typeof job.createdAt === "string" &&
+    typeof job.updatedAt === "string" &&
+    typeof job.url === "string" &&
+    typeof job.limit === "number" &&
+    Array.isArray(job.platforms)
+  );
+}
+
+function persistJobs() {
+  const statePath = getTelegramClipJobsStatePath();
+  const payload: PersistedTelegramClipJobs = {
+    version: 1,
+    jobs: [...jobs.values()],
+    queue: jobQueue.filter((jobId) => jobs.get(jobId)?.status === "queued"),
+  };
+
+  try {
+    mkdirSync(path.dirname(statePath), { recursive: true });
+    const tmpPath = `${statePath}.${process.pid}.tmp`;
+    writeFileSync(tmpPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    renameSync(tmpPath, statePath);
+  } catch {
+    // Persistence is best-effort. Runtime queue behavior must not fail because disk is unavailable.
   }
 }
