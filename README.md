@@ -68,6 +68,8 @@ npm install
 npm run dev
 npm run build
 npm run typecheck
+npm test
+npm run test:coverage
 
 # clipping
 npm run verify:clipping

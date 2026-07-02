@@ -9,6 +9,7 @@ out/
 build/
 dist/
 output/
+coverage/
 tsconfig.tsbuildinfo
 
 # environment files
